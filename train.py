@@ -188,7 +188,7 @@ if __name__ == '__main__':
         model = models.get(
             args['model'],
             num_classes=no_class,
-            checkpoint_path=args["weight"]
+            checkpoint_path=None
         )
     else:
         model = models.get(
