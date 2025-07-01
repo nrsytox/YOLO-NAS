@@ -194,7 +194,7 @@ if __name__ == '__main__':
         model = models.get(
             args['model'],
             num_classes=no_class, 
-            pretrained_weights=args["weight"]
+            pretrained_weights=None
         )
 
     train_params = {
