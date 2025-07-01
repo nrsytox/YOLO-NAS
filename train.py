@@ -102,10 +102,10 @@ if __name__ == '__main__':
 
     # Load Path Params
     yaml_params = yaml.safe_load(open(args['data'], 'r'))
-    with open(os.path.join(yaml_params['Dir'], yaml_params['labels']['train'])) as f:
-        no_class = len(json.load(f)['categories'])
-        f.close()
+    # Usa diretamente o 'nc' que definiste no yaml
+    no_class = yaml_params.get('nc', 1)
     print(f"\033[1m[INFO] Number of Classes: {no_class}\033[0m")
+
     
     # Reain Dataset
     trainset = COCOFormatDetectionDataset(data_dir=yaml_params['Dir'],
