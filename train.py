@@ -199,7 +199,7 @@ if __name__ == '__main__':
 
     train_params = {
         'silent_mode': False,
-        "average_best_models":True,
+        "average_best_models":False,
         "warmup_mode": args['warmup_mode'],
         "warmup_initial_lr": args['warmup_initial_lr'],
         "lr_warmup_epochs": args['lr_warmup_epochs'],
