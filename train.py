@@ -209,7 +209,7 @@ if __name__ == '__main__':
         "optimizer": args['optimizer'],
         "optimizer_params": {"weight_decay": args['weight_decay']},
         "zero_weight_decay_on_bias_and_bn": True,
-        "ema": True,
+        "ema": False,
         "ema_params": {"decay": 0.9, "decay_type": "threshold"},
         "max_epochs": args['epoch'],
         "mixed_precision": True,
