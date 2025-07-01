@@ -102,9 +102,13 @@ if __name__ == '__main__':
 
     # Load Path Params
     yaml_params = yaml.safe_load(open(args['data'], 'r'))
-    # Usa diretamente o 'nc' que definiste no yaml
-    no_class = yaml_params.get('nc', 1)
+
+    # Obter número de classes a partir do yaml
+    no_class = yaml_params.get('nc', None)
+    if no_class is None:
+    raise ValueError("Número de classes 'nc' não encontrado no ficheiro yaml.")
     print(f"\033[1m[INFO] Number of Classes: {no_class}\033[0m")
+
 
     
     # Reain Dataset
