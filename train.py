@@ -106,7 +106,7 @@ if __name__ == '__main__':
     # Obter número de classes a partir do yaml
     no_class = yaml_params.get('nc', None)
     if no_class is None:
-    raise ValueError("Número de classes 'nc' não encontrado no ficheiro yaml.")
+        raise ValueError("Número de classes 'nc' não encontrado no ficheiro yaml.")
     print(f"\033[1m[INFO] Number of Classes: {no_class}\033[0m")
 
 
