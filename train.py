@@ -90,15 +90,26 @@ if __name__ == '__main__':
     print(f"[INFO] Checkpoints saved in \033[1m{os.path.join('runs', name)}\033[0m")
     
     # Training on GPU or CPU
-    if args['cpu']:
-        print('[INFO] Training on \033[1mCPU\033[0m')
-        trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', device='cpu')
-    elif args['gpus']:
-        print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name()}\033[0m')
+if args['cpu']:
+    print('[INFO] Training on \033[1mCPU\033[0m')
+    trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', device='cpu')
+
+elif args['gpus']:
+    if torch.cuda.is_available():
+        print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name(0)}\033[0m')
         trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', multi_gpu=args['gpus'])
     else:
-        print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name()}\033[0m')
+        print('[WARNING] GPU flag set but no CUDA device found. Falling back to CPU.')
+        trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', device='cpu')
+
+else:
+    if torch.cuda.is_available():
+        print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name(0)}\033[0m')
         trainer = Trainer(experiment_name=name, ckpt_root_dir='runs')
+    else:
+        print('[WARNING] No GPU found. Training on CPU.')
+        trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', device='cpu')
+
 
     # Load Path Params
     yaml_params = yaml.safe_load(open(args['data'], 'r'))
