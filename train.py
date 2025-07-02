@@ -89,27 +89,31 @@ if __name__ == '__main__':
                 n += 1
     print(f"[INFO] Checkpoints saved in \033[1m{os.path.join('runs', name)}\033[0m")
     
-    # Training on GPU or CPU
-if args['cpu']:
-    print('[INFO] Training on \033[1mCPU\033[0m')
-    trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', device='cpu')
+    from super_gradients import Trainer, setup_device
 
-elif args['gpus']:
-    if torch.cuda.is_available():
-        print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name(0)}\033[0m')
-        trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', multi_gpu=args['gpus'])
+    # Setup device before Trainer is created
+    if args['cpu']:
+        print('[INFO] Training on \033[1mCPU\033[0m')
+        setup_device(device='cpu')
+
+    elif args['gpus']:
+        if torch.cuda.is_available():
+            print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name(0)}\033[0m')
+            setup_device(device='cuda', multi_gpu=args['gpus'])
+        else:
+            print('[WARNING] GPU flag set but no CUDA device found. Falling back to CPU.')
+            setup_device(device='cpu')
+    
     else:
-        print('[WARNING] GPU flag set but no CUDA device found. Falling back to CPU.')
-        trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', device='cpu')
+        if torch.cuda.is_available():
+            print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name(0)}\033[0m')
+            setup_device(device='cuda')
+        else:
+            print('[WARNING] No GPU found. Training on CPU.')
+            setup_device(device='cpu')
 
-else:
-    if torch.cuda.is_available():
-        print(f'[INFO] Training on GPU: \033[1m{torch.cuda.get_device_name(0)}\033[0m')
-        trainer = Trainer(experiment_name=name, ckpt_root_dir='runs')
-    else:
-        print('[WARNING] No GPU found. Training on CPU.')
-        trainer = Trainer(experiment_name=name, ckpt_root_dir='runs', device='cpu')
-
+    # Agora crie o Trainer normalmente
+    trainer = Trainer(experiment_name=name, ckpt_root_dir='runs')
 
     # Load Path Params
     yaml_params = yaml.safe_load(open(args['data'], 'r'))
