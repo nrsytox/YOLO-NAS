@@ -217,8 +217,30 @@ if __name__ == '__main__':
                             "collate_fn": CrowdDetectionCollateFN(),
                             "worker_init_fn": worker_init_reset_seed
                             }
-
-   
+    
+    testset = COCOFormatDetectionDataset(
+                data_dir=yaml_params['Dir'],
+                images_dir=yaml_params['images']['test'],
+                json_annotation_file=os.path.join(yaml_params['Dir'], yaml_params['labels']['test']),
+                input_dim=(args['size'], args['size']),
+                ignore_empty_annotations=False,
+                transforms=[
+                    DetectionPaddedRescale(input_dim=(args['size'], args['size']), max_targets=300),
+                    DetectionStandardize(max_value=255),
+                    DetectionTargetsFormatTransform(max_targets=300, input_dim=(args['size'], args['size']),
+                                                    output_format="LABEL_CXCYWH")
+                ]
+            )
+    
+    test_loader = dataloaders.get(dataset=testset, dataloader_params={
+                                            "shuffle": False,
+                                            "batch_size": int(args['batch']*2),
+                                            "num_workers": args['worker'],
+                                            "drop_last": False,
+                                            "pin_memory": True,
+                                            "collate_fn": CrowdDetectionCollateFN(),
+                                            "worker_init_fn": worker_init_reset_seed
+                                        })
     
     # To Resume Training or re-train
     if args['resume'] or args["weight"].endswith('.pth'):
