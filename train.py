@@ -22,6 +22,9 @@ import os
 if __name__ == '__main__':
 
     ap = argparse.ArgumentParser()
+    
+    ap.add_argument('--test', action='store_true', 
+                help='Executar apenas o teste')
     ap.add_argument("-i", "--data", type=str, required=True,
                     help="path to data.yaml")
     ap.add_argument("-n", "--name", type=str,
@@ -47,8 +50,6 @@ if __name__ == '__main__':
                 help="Run on CPU")
     ap.add_argument("--qat", action='store_true',
                 help="Quantization Aware Training")
-    parser.add_argument('--test', action='store_true', 
-                help='Executar apenas o teste')
     
     
     # train_params
