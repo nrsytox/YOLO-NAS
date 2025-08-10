@@ -20,7 +20,7 @@ def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
     trainer = Trainer(experiment_name='yolo_nas_test', ckpt_root_dir='runs')
 
     # Carregar o modelo
-    model = get('yolo_nas_m', num_classes=None, pretrained_weights=None)
+    model = get('yolo_nas_m', num_classes=num_classes, pretrained_weights=None)
     model = model.to(device)
 
     # Carregar o checkpoint
