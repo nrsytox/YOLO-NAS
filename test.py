@@ -13,6 +13,10 @@ from super_gradients.training.utils.detection_utils import CrowdDetectionCollate
 def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+    with open(data_yaml, 'r') as f:
+    data = yaml.safe_load(f)
+
+    num_classes = len(data['names'])
     # Criar o Trainer
     trainer = Trainer(experiment_name='yolo_nas_test', ckpt_root_dir='runs')
 
@@ -26,8 +30,8 @@ def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
     # Preparar o dataset e o dataloader
     testset = COCOFormatDetectionDataset(
         data_dir=data_yaml['Dir'],
-        images_dir=data_yaml['images']['val'],
-        json_annotation_file=data_yaml['labels']['val'],
+        images_dir=data_yaml['images']['test'],
+        json_annotation_file=data_yaml['labels']['test'],
         input_dim=(640, 640),
         ignore_empty_annotations=False,
         transforms=[
