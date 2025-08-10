@@ -13,6 +13,14 @@ def load_yaml_config(yaml_file):
     with open(yaml_file) as f:
         return yaml.safe_load(f)
 
+class FixedCOCODetectionDataset(COCODetectionDataset):
+    """Subclasse para corrigir o problema do caminho das imagens"""
+    def _load_image(self, index):
+        img_file = os.path.join(self.data_dir, self.images[index])
+        if not os.path.exists(img_file):
+            raise FileNotFoundError(f"Image file not found: {img_file}")
+        return super()._load_image(index)
+
 def test_model(
     checkpoint_path: str,
     config_path: str,
@@ -25,7 +33,7 @@ def test_model(
 ):
     """
     Testa o modelo YOLO-NAS usando configuração YAML e calcula métricas.
-    Versão final compatível com super-gradients==3.1.3
+    Versão com correção do caminho das imagens.
     """
     # Carregar configuração YAML
     config = load_yaml_config(config_path)
@@ -47,17 +55,21 @@ def test_model(
     model = model.to(device)
     model.eval()
     
-    # Configurar dataset de teste
+    # Configurar dataset de teste com nossa classe corrigida
     print("Configurando dataset de teste...")
-    test_dataset = COCODetectionDataset(
-        data_dir=test_images_dir,
+    print(f"Procurando imagens em: {test_images_dir}")
+    print(f"Procurando anotações em: {test_annotations_path}")
+    
+    test_dataset = FixedCOCODetectionDataset(
+        data_dir=test_images_dir,  # Caminho direto para as imagens
         json_file=test_annotations_path,
         input_dim=(640, 640),
         transforms=[
             {'DetectionPaddedRescale': {'input_dim': (640, 640)}},
             {'DetectionStandardize': {'max_value': 255.0}},
             {'DetectionImagePermute': {}},
-        ]
+        ],
+        images_dir=""  # Forçamos a usar apenas data_dir
     )
     
     test_loader = DataLoader(
@@ -68,7 +80,7 @@ def test_model(
         collate_fn=DetectionCollateFN()
     )
     
-    # Configurar métricas (sem calc_best_score)
+    # Configurar métricas
     print("Configurando métricas de avaliação...")
     metrics = DetectionMetrics(
         num_cls=num_classes,
@@ -105,7 +117,7 @@ def test_model(
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - Versão Final 3.1.3")
+    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - Versão Corrigida")
     parser.add_argument("--checkpoint", type=str, required=True, help="Caminho para o checkpoint .pth")
     parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
     parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
