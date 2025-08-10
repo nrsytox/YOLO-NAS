@@ -24,7 +24,7 @@ def test_model(
 ):
     """
     Testa o modelo YOLO-NAS usando configuração YAML e calcula métricas.
-    Compatível com super-gradients==3.1.3
+    Versão final compatível com super-gradients==3.1.3
     """
     # Carregar configuração YAML
     config = load_yaml_config(config_path)
@@ -46,14 +46,14 @@ def test_model(
     model = model.to(device)
     model.eval()
     
-    # Configurar dataset de teste com transformações compatíveis
+    # Configurar dataset de teste com transformações comprovadamente compatíveis
     print("Configurando dataset de teste...")
     test_dataset = COCODetectionDataset(
         data_dir=test_images_dir,
         json_file=test_annotations_path,
         input_dim=(640, 640),  # Tamanho fixo para YOLO-NAS
         transforms=[
-            {'DetectionRescale': {'output_size': (640, 640)}},
+            {'DetectionPaddedRescale': {'input_dim': (640, 640)}},
             {'DetectionStandardize': {'max_value': 255.0}},
             {'DetectionImagePermute': {}},
         ]
@@ -104,7 +104,7 @@ def test_model(
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - SG 3.1.3")
+    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - Versão Final 3.1.3")
     parser.add_argument("--checkpoint", type=str, required=True, help="Caminho para o checkpoint .pth")
     parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
     parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
