@@ -22,7 +22,7 @@ class RobustCOCODetectionDataset(COCODetectionDataset):
         img_file = self._get_img_path(index)
         if not os.path.exists(img_file):
             print(f"Aviso: Arquivo de imagem não encontrado, substituindo por imagem preta: {img_file}")
-            return torch.zeros((3, self.input_dim[1], self.input_dim[0]), img_file
+            return torch.zeros(3, self.input_dim[1], self.input_dim[0]), img_file
         try:
             img = cv2.imread(img_file)
             if img is None:
