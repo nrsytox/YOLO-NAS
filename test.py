@@ -46,15 +46,14 @@ def test_model(
     model = model.to(device)
     model.eval()
     
-    # Configurar dataset de teste
+    # Configurar dataset de teste com transformações compatíveis
     print("Configurando dataset de teste...")
     test_dataset = COCODetectionDataset(
         data_dir=test_images_dir,
         json_file=test_annotations_path,
         input_dim=(640, 640),  # Tamanho fixo para YOLO-NAS
         transforms=[
-            {'DetectionLongestMaxSizeRescale': {'max_size': 640}},
-            {'DetectionPadToSize': {'output_size': (640, 640), 'pad_value': 114}},
+            {'DetectionRescale': {'output_size': (640, 640)}},
             {'DetectionStandardize': {'max_value': 255.0}},
             {'DetectionImagePermute': {}},
         ]
