@@ -6,9 +6,9 @@ from super_gradients.training.models import get
 from super_gradients.training.datasets.detection_datasets.coco_format_detection import COCOFormatDetectionDataset
 from super_gradients.training.transforms.transforms import DetectionMosaic, DetectionRandomAffine, DetectionHSV, \
     DetectionHorizontalFlip, DetectionPaddedRescale, DetectionStandardize, DetectionTargetsFormatTransform
-from super_gradients.training.datasets.dataloaders import dataloaders
-from super_gradients.training.datasets.detection_datasets.utils import CrowdDetectionCollateFN
-from super_gradients.training.datasets.detection_datasets.utils import worker_init_reset_seed
+from super_gradients.training import dataloaders
+from super_gradients.training.datasets.datasets_utils import worker_init_reset_seed
+from super_gradients.training.utils.detection_utils import CrowdDetectionCollateFN
 
 def main(data_yaml, weight_path, model_name='yolo_nas_m', batch_size=4, confidence_threshold=0.5, size=640, num_workers=4):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
