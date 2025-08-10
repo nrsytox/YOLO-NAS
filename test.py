@@ -18,22 +18,12 @@ def test_model(
     batch_size: int = 4,
     conf_threshold: float = 0.5,
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
-    model_arch: str = 'yolo_nas_l',
+    model_arch: str = 'yolo_nas_m',
     visualize: bool = False,
     output_dir: str = 'outputs'
 ):
     """
     Testa o modelo YOLO-NAS usando configuração YAML e calcula métricas.
-    
-    Args:
-        checkpoint_path (str): Caminho para o checkpoint .pth
-        config_path (str): Caminho para o arquivo YAML de configuração
-        batch_size (int): Tamanho do batch para inferência
-        conf_threshold (float): Limiar de confiança para detecções
-        device (str): Dispositivo para execução
-        model_arch (str): Arquitetura do modelo
-        visualize (bool): Se True, salva visualizações
-        output_dir (str): Pasta para salvar resultados
     """
     # Carregar configuração YAML
     config = load_yaml_config(config_path)
@@ -51,12 +41,21 @@ def test_model(
     model = model.to(device)
     model.eval()
     
+    # Obter tamanho de entrada do modelo (ajuste para versões mais recentes do SuperGradients)
+    try:
+        input_dim = model._image_size
+    except AttributeError:
+        try:
+            input_dim = model._default_nms_conf.image_size
+        except AttributeError:
+            input_dim = [640, 640]  # Valor padrão se não for encontrado
+    
     # Configurar dataset de teste
     print("Configurando dataset de teste...")
     test_dataset = COCOFormatDetectionDataset(
         data_dir=test_images_dir,
         json_annotation_file=test_annotations_path,
-        input_dim=model._default_nms_conf.image_size,
+        input_dim=input_dim,
         transforms=model._preprocessing_transforms
     )
     
@@ -128,7 +127,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
     parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
     parser.add_argument("--conf_threshold", type=float, default=0.5, help="Limiar de confiança")
-    parser.add_argument("--model_arch", type=str, default="yolo_nas_l", 
+    parser.add_argument("--model_arch", type=str, default="yolo_nas_m", 
                         choices=["yolo_nas_s", "yolo_nas_m", "yolo_nas_l"], help="Arquitetura do modelo")
     parser.add_argument("--visualize", action="store_true", help="Gerar visualizações")
     parser.add_argument("--output_dir", type=str, default="test_outputs", help="Pasta de saída")
