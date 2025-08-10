@@ -126,48 +126,48 @@ if __name__ == '__main__':
     if no_class is None:
         raise ValueError("Número de classes 'nc' não encontrado no ficheiro yaml.")
     print(f"\033[1m[INFO] Number of Classes: {no_class}\033[0m")
-        if args['test']:
-            print("Começou teste:")
-             # Test Data
-            if 'test' in (yaml_params['images'].keys() or yaml_params['labels'].keys()):
-                testset = COCOFormatDetectionDataset(
-                    data_dir=yaml_params['Dir'],
-                    images_dir=yaml_params['images']['test'],
-                    json_annotation_file=os.path.join(yaml_params['Dir'], yaml_params['labels']['test']),
-                    input_dim=(args['size'], args['size']),
-                    ignore_empty_annotations=False,
-                    transforms=[
-                        DetectionPaddedRescale(input_dim=(args['size'], args['size']), max_targets=300),
-                        DetectionStandardize(max_value=255),
-                        DetectionTargetsFormatTransform(max_targets=300, input_dim=(args['size'], args['size']),
-                                                        output_format="LABEL_CXCYWH")
-                    ]
-                )
+    if args['test']:
+        print("Começou teste:")
+         # Test Data
+        if 'test' in (yaml_params['images'].keys() or yaml_params['labels'].keys()):
+            testset = COCOFormatDetectionDataset(
+                data_dir=yaml_params['Dir'],
+                images_dir=yaml_params['images']['test'],
+                json_annotation_file=os.path.join(yaml_params['Dir'], yaml_params['labels']['test']),
+                input_dim=(args['size'], args['size']),
+                ignore_empty_annotations=False,
+                transforms=[
+                    DetectionPaddedRescale(input_dim=(args['size'], args['size']), max_targets=300),
+                    DetectionStandardize(max_value=255),
+                    DetectionTargetsFormatTransform(max_targets=300, input_dim=(args['size'], args['size']),
+                                                    output_format="LABEL_CXCYWH")
+                ]
+            )
+    
+            test_loader = dataloaders.get(dataset=testset, dataloader_params={
+                                            "shuffle": False,
+                                            "batch_size": int(args['batch']*2),
+                                            "num_workers": args['worker'],
+                                            "drop_last": False,
+                                            "pin_memory": True,
+                                            "collate_fn": CrowdDetectionCollateFN(),
+                                            "worker_init_fn": worker_init_reset_seed
+                                        })
         
-                test_loader = dataloaders.get(dataset=testset, dataloader_params={
-                                                "shuffle": False,
-                                                "batch_size": int(args['batch']*2),
-                                                "num_workers": args['worker'],
-                                                "drop_last": False,
-                                                "pin_memory": True,
-                                                "collate_fn": CrowdDetectionCollateFN(),
-                                                "worker_init_fn": worker_init_reset_seed
-                                            })
-            
-            # Carregar checkpoint no modelo
-            trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
-    
-            # Rodar apenas o teste (validação)
-            results = trainer.test(model=model, test_loader=valid_loader, batch_size=args.batch_size)
-    
-            # Exibir resultados principais
-            print("Resultados do teste:")
-            print(f"Precision: {results['precision']:.4f}")
-            print(f"Recall:    {results['recall']:.4f}")
-            print(f"mAP@0.50:  {results['mAP@0.50']:.4f}")
-            
-            import sys
-            sys.exit(0) 
+        # Carregar checkpoint no modelo
+        trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
+
+        # Rodar apenas o teste (validação)
+        results = trainer.test(model=model, test_loader=valid_loader, batch_size=args.batch_size)
+
+        # Exibir resultados principais
+        print("Resultados do teste:")
+        print(f"Precision: {results['precision']:.4f}")
+        print(f"Recall:    {results['recall']:.4f}")
+        print(f"mAP@0.50:  {results['mAP@0.50']:.4f}")
+        
+        import sys
+        sys.exit(0) 
     
     # Reain Dataset
     trainset = COCOFormatDetectionDataset(data_dir=yaml_params['Dir'],
