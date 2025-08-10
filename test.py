@@ -28,7 +28,7 @@ def main(data_yaml, weight_path, model_name='yolo_nas_m', batch_size=4, confiden
     model = model.to(device)
 
     # Carregar checkpoint no modelo
-    trainer._load_checkpoint_to_model(model, weight_path)
+    trainer.load_weights(weight_path, model=model)
 
     # Criar test dataset e loader
     if 'test' in (yaml_params['images'].keys() or yaml_params['labels'].keys()):
