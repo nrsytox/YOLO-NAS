@@ -200,6 +200,7 @@ if __name__ == '__main__':
                                         "worker_init_fn": worker_init_reset_seed
                                     })
     if args['test']:
+        print("Começou teste:")
         # Carregar checkpoint no modelo
         trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
 
