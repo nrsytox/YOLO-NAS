@@ -1,80 +1,132 @@
-import argparse
 import os
-import json
-from pathlib import Path
-
 import torch
-import cv2
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
+import yaml
+from super_gradients.training import models
+from super_gradients.training.metrics import DetectionMetrics
+from super_gradients.training.datasets.detection_datasets import COCODetectionDataset
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from super_gradients.training.utils.detection_utils import DetectionCollateFN
 
-from super_gradients.training import Trainer
-from super_gradients.training.models import get
+def load_yaml_config(yaml_file):
+    """Carrega o arquivo de configuração YAML."""
+    with open(yaml_file) as f:
+        return yaml.safe_load(f)
 
-def run_inference(model, image_paths, conf_threshold):
-    results = []
-    for img_path in image_paths:
-        img = cv2.imread(img_path)
-        if img is None:
-            print(f"Warning: can't read {img_path}")
-            continue
+def test_model(
+    checkpoint_path: str,
+    config_path: str,
+    batch_size: int = 4,
+    conf_threshold: float = 0.5,
+    iou_threshold: float = 0.5,
+    device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
+    model_arch: str = 'yolo_nas_m',
+    output_dir: str = 'outputs'
+):
+    """
+    Teste final do modelo YOLO-NAS com todos os parâmetros corrigidos
+    """
+    # Carregar configuração YAML
+    config = load_yaml_config(config_path)
+    test_images_dir = os.path.join(config['Dir'], config['images']['test'])
+    test_annotations_path = os.path.join(config['Dir'], config['labels']['test'])
+    num_classes = config['nc']
+    class_names = config['names']
+    
+    # Verificar caminhos
+    print(f"\nVerificando caminhos:")
+    print(f"Images dir: {test_images_dir}")
+    print(f"Annotations path: {test_annotations_path}")
+    
+    if not os.path.exists(test_images_dir):
+        raise FileNotFoundError(f"Diretório de imagens não encontrado: {test_images_dir}")
+    if not os.path.exists(test_annotations_path):
+        raise FileNotFoundError(f"Arquivo de anotações não encontrado: {test_annotations_path}")
 
-        # preprocess if needed - adapte conforme seu código
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # Carregar modelo
+    print(f"\nCarregando modelo {model_arch}...")
+    model = models.get(model_arch, num_classes=num_classes, pretrained_weights=None)
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['net'])
+    model = model.to(device)
+    model.eval()
 
-        # inferência (adaptar para seu método)
-        preds = model.predict(img_rgb, conf=conf_threshold)  # exemplo, ajuste conforme API real
-        # preds deve conter: boxes [x1, y1, x2, y2], scores, classes
+    # Configurar dataset - versão corrigida com images_dir
+    print("\nConfigurando dataset de teste...")
+    test_dataset = COCODetectionDataset(
+        data_dir=test_images_dir,
+        json_file=test_annotations_path,
+        images_dir="",  # Usa data_dir como base
+        input_dim=(640, 640),
+        transforms=[
+            {'DetectionPaddedRescale': {'input_dim': (640, 640)}},
+            {'DetectionStandardize': {'max_value': 255.0}},
+            {'DetectionImagePermute': {}},
+        ]
+    )
 
-        # Convertendo predições para formato COCO
-        for box, score, cls in zip(preds['boxes'], preds['scores'], preds['classes']):
-            x1, y1, x2, y2 = box
-            w = x2 - x1
-            h = y2 - y1
-            results.append({
-                "image_id": int(Path(img_path).stem),  # ajuste se seu ID for outro
-                "category_id": int(cls),
-                "bbox": [x1, y1, w, h],
-                "score": float(score)
-            })
+    # Verificar acesso às imagens
+    print("\nTestando acesso às primeiras imagens...")
+    for i in range(min(3, len(test_dataset))):
+        try:
+            img, _ = test_dataset[i]
+            print(f"Imagem {i} carregada com sucesso")
+        except Exception as e:
+            print(f"Erro ao carregar imagem {i}: {str(e)}")
+            raise
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        collate_fn=DetectionCollateFN()
+    )
+
+    # Configurar métricas
+    metrics = DetectionMetrics(
+        num_cls=num_classes,
+        post_prediction_callback=model.get_post_prediction_callback(conf=conf_threshold, iou=iou_threshold),
+        normalize_targets=True
+    )
+
+    # Loop de teste
+    print(f"\nIniciando teste em {len(test_dataset)} imagens...")
+    for imgs, targets in tqdm(test_loader, desc="Processando"):
+        imgs = imgs.to(device)
+        targets = [t.to(device) for t in targets]
+        
+        with torch.no_grad():
+            preds = model(imgs)
+        metrics.update(preds, targets)
+
+    # Resultados
+    results = metrics.compute()
+    print("\n=== Resultados ===")
+    print(f"Precisão @0.5: {results['precision@0.50']:.4f}")
+    print(f"Recall @0.5: {results['recall@0.50']:.4f}")
+    print(f"mAP@0.50: {results['mAP@0.50']:.4f}")
+
     return results
 
-def evaluate_coco(gt_json_path, pred_json_path):
-    coco_gt = COCO(gt_json_path)
-    coco_dt = coco_gt.loadRes(pred_json_path)
-    coco_eval = COCOeval(coco_gt, coco_dt, iouType='bbox')
-    coco_eval.evaluate()
-    coco_eval.accumulate()
-    coco_eval.summarize()
-
-def main(args):
-    # Carregar modelo
-    model = get(args.model, num_classes=args.num_classes, pretrained_weights=None)
-    trainer = Trainer()
-    trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
-
-    # Listar imagens para inferir
-    image_dir = Path(args.source)
-    image_paths = list(image_dir.glob("*.jpg")) + list(image_dir.glob("*.png"))
-
-    # Rodar inferência
-    predictions = run_inference(model, image_paths, args.conf)
-
-    # Salvar predições em formato COCO JSON
-    pred_json_path = "predictions.json"
-    with open(pred_json_path, "w") as f:
-        json.dump(predictions, f)
-
-    # Avaliar usando COCOeval
-    evaluate_coco(args.gt_annotations, pred_json_path)
-
 if __name__ == "__main__":
+    import argparse
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="yolo_nas_m")
-    parser.add_argument("--weights", type=str, required=True)
-    parser.add_argument("--source", type=str, required=True, help="pasta com imagens para inferência")
-    parser.add_argument("--gt_annotations", type=str, required=True, help="arquivo JSON COCO das anotações verdadeiras")
-    parser.add_argument("--conf", type=float, default=0.5)
-    parser.add_argument("--num_classes", type=int, default=1)
+    parser.add_argument("--checkpoint", required=True, help="Caminho para o checkpoint .pth")
+    parser.add_argument("--config", required=True, help="Arquivo de configuração YAML")
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--conf_threshold", type=float, default=0.5)
+    parser.add_argument("--iou_threshold", type=float, default=0.5)
+    parser.add_argument("--output_dir", default="outputs")
+    
     args = parser.parse_args()
-    main(args)
+    
+    test_model(
+        checkpoint_path=args.checkpoint,
+        config_path=args.config,
+        batch_size=args.batch_size,
+        conf_threshold=args.conf_threshold,
+        iou_threshold=args.iou_threshold,
+        output_dir=args.output_dir
+    )
