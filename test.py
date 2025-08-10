@@ -13,23 +13,21 @@ from super_gradients.training.utils.detection_utils import CrowdDetectionCollate
 def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+    # Criar o Trainer
     trainer = Trainer(experiment_name='yolo_nas_test', ckpt_root_dir='runs')
 
-    # Carregar modelo
-    model = get('yolo_nas_m', num_classes=1, pretrained_weights=None).to(device)
+    # Carregar o modelo
+    model = get('yolo_nas_m', num_classes=None, pretrained_weights=None)
+    model = model.to(device)
 
-    # Carregar checkpoint para o modelo
+    # Carregar o checkpoint
     trainer.load_checkpoint(checkpoint_path=weight_path, model=model)
 
-    # Preparar dataset e dataloader para teste
-    import yaml
-    with open(data_yaml, 'r') as f:
-        yaml_params = yaml.safe_load(f)
-
+    # Preparar o dataset e o dataloader
     testset = COCOFormatDetectionDataset(
-        data_dir=yaml_params['Dir'],
-        images_dir=yaml_params['images']['val'],  # ajustar se seu yaml usa 'val' ou 'test'
-        json_annotation_file=yaml_params['labels']['val'],
+        data_dir=data_yaml['Dir'],
+        images_dir=data_yaml['images']['val'],
+        json_annotation_file=data_yaml['labels']['val'],
         input_dim=(640, 640),
         ignore_empty_annotations=False,
         transforms=[
@@ -49,10 +47,10 @@ def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
         "worker_init_fn": None
     })
 
-    # Rodar teste
+    # Rodar o teste
     results = trainer.test(model=model, test_loader=test_loader, device=device, confidence_threshold=confidence_threshold)
 
-    # Mostrar métricas
+    # Exibir os resultados
     print("\n===== RESULTADOS =====")
     print(f"Precision: {results['precision']:.4f}")
     print(f"Recall:    {results['recall']:.4f}")
@@ -61,8 +59,7 @@ def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
         print(f"mAP@0.50:0.95: {results['mAP@0.50:0.95']:.4f}")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Uso: python test.py <data_yaml> <weight_path>")
-        sys.exit(1)
-    _, data_yaml, weight_path = sys.argv
+    # Substitua pelos caminhos corretos
+    data_yaml = '/content/drive/MyDrive/dataset_victim_data/victim_data.yaml'
+    weight_path = '/content/drive/MyDrive/pdd_nas_output0/ckpt_best.pth'
     main(data_yaml, weight_path)
