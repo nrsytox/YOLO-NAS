@@ -18,7 +18,7 @@ def test_model(
     config_path: str,
     batch_size: int = 4,
     conf_threshold: float = 0.5,
-    iou_threshold: float = 0.5,  # Adicionado parâmetro iou
+    iou_threshold: float = 0.5,
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
     model_arch: str = 'yolo_nas_m',
     output_dir: str = 'outputs'
@@ -52,7 +52,7 @@ def test_model(
     test_dataset = COCODetectionDataset(
         data_dir=test_images_dir,
         json_file=test_annotations_path,
-        input_dim=(640, 640),  # Tamanho fixo para YOLO-NAS
+        input_dim=(640, 640),
         transforms=[
             {'DetectionPaddedRescale': {'input_dim': (640, 640)}},
             {'DetectionStandardize': {'max_value': 255.0}},
@@ -68,13 +68,12 @@ def test_model(
         collate_fn=DetectionCollateFN()
     )
     
-    # Configurar métricas com iou_threshold
+    # Configurar métricas (sem calc_best_score)
     print("Configurando métricas de avaliação...")
     metrics = DetectionMetrics(
         num_cls=num_classes,
         post_prediction_callback=model.get_post_prediction_callback(conf=conf_threshold, iou=iou_threshold),
-        normalize_targets=True,
-        calc_best_score=False
+        normalize_targets=True
     )
     
     # Loop de teste
