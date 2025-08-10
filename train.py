@@ -72,22 +72,7 @@ if __name__ == '__main__':
     args = vars(ap.parse_args())
 
     # Start Time
-    s_time = time.time()
-    if args['test']:
-        # Carregar checkpoint no modelo
-        Trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
-
-        # Rodar apenas o teste (validação)
-        results = trainer.test(model=model, test_loader=valid_loader, batch_size=args.batch_size)
-
-        # Exibir resultados principais
-        print("Resultados do teste:")
-        print(f"Precision: {results['precision']:.4f}")
-        print(f"Recall:    {results['recall']:.4f}")
-        print(f"mAP@0.50:  {results['mAP@0.50']:.4f}")
-        
-        import sys
-        sys.exit(0)  
+    s_time = time.time() 
 
     if args['name'] is None:
         name = 'train'
@@ -214,7 +199,21 @@ if __name__ == '__main__':
                                         "collate_fn": CrowdDetectionCollateFN(),
                                         "worker_init_fn": worker_init_reset_seed
                                     })
+    if args['test']:
+        # Carregar checkpoint no modelo
+        trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
 
+        # Rodar apenas o teste (validação)
+        results = trainer.test(model=model, test_loader=valid_loader, batch_size=args.batch_size)
+
+        # Exibir resultados principais
+        print("Resultados do teste:")
+        print(f"Precision: {results['precision']:.4f}")
+        print(f"Recall:    {results['recall']:.4f}")
+        print(f"mAP@0.50:  {results['mAP@0.50']:.4f}")
+        
+        import sys
+        sys.exit(0) 
     # To Resume Training or re-train
     if args['resume'] or args["weight"].endswith('.pth'):
         model = models.get(
