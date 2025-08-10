@@ -20,7 +20,7 @@ def main(data_yaml, weight_path, model_name='yolo_nas_m', batch_size=4, confiden
     model = model.to(device)
 
     # Carregar checkpoint no modelo
-    trainer.load_checkpoint_to_model(model, weight_path, load_backbone=False, strict=False)
+    trainer._load_checkpoint_to_model(model, weight_path, load_backbone=False, strict=False)
 
     # Rodar teste — usa conjunto de validação definido no YAML
     results = trainer.test(
