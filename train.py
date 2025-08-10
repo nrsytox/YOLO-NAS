@@ -47,6 +47,8 @@ if __name__ == '__main__':
                 help="Run on CPU")
     ap.add_argument("--qat", action='store_true',
                 help="Quantization Aware Training")
+    parser.add_argument('--test', action='store_true', 
+                help='Executar apenas o teste')
     
     
     # train_params
@@ -70,6 +72,21 @@ if __name__ == '__main__':
 
     # Start Time
     s_time = time.time()
+    if args.test:
+        # Carregar checkpoint no modelo
+        trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
+
+        # Rodar apenas o teste (validação)
+        results = trainer.test(model=model, test_loader=valid_loader, batch_size=args.batch_size)
+
+        # Exibir resultados principais
+        print("Resultados do teste:")
+        print(f"Precision: {results['precision']:.4f}")
+        print(f"Recall:    {results['recall']:.4f}")
+        print(f"mAP@0.50:  {results['mAP@0.50']:.4f}")
+        
+        import sys
+        sys.exit(0)  
 
     if args['name'] is None:
         name = 'train'
@@ -123,7 +140,6 @@ if __name__ == '__main__':
     if no_class is None:
         raise ValueError("Número de classes 'nc' não encontrado no ficheiro yaml.")
     print(f"\033[1m[INFO] Number of Classes: {no_class}\033[0m")
-
 
     
     # Reain Dataset
@@ -290,6 +306,7 @@ if __name__ == '__main__':
     print('\033[1m [INFO] Validating Model:\033[0m')
     for i in eval_model:
         print(f"{i}: {float(eval_model[i])}")
+
 
     # Evaluating on Test Dataset
     if 'test' in (yaml_params['images'].keys() or yaml_params['labels'].keys()):
