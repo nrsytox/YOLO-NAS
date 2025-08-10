@@ -13,9 +13,16 @@ def load_yaml_config(yaml_file):
     with open(yaml_file) as f:
         return yaml.safe_load(f)
 
-class FixedCOCODetectionDataset(COCODetectionDataset):
-    """Subclasse para corrigir o problema do caminho das imagens"""
+class FixedPathCOCODataset(COCODetectionDataset):
+    """Dataset com caminhos corrigidos para evitar duplicação de paths"""
+    def __init__(self, *args, **kwargs):
+        # Remove images_dir se estiver presente para evitar conflito
+        if 'images_dir' in kwargs:
+            kwargs.pop('images_dir')
+        super().__init__(*args, **kwargs)
+    
     def _load_image(self, index):
+        """Corrige o caminho da imagem para usar diretamente data_dir"""
         img_file = os.path.join(self.data_dir, self.images[index])
         if not os.path.exists(img_file):
             raise FileNotFoundError(f"Image file not found: {img_file}")
@@ -33,7 +40,7 @@ def test_model(
 ):
     """
     Testa o modelo YOLO-NAS usando configuração YAML e calcula métricas.
-    Versão com correção do caminho das imagens.
+    Versão final completamente funcional para super-gradients 3.1.3
     """
     # Carregar configuração YAML
     config = load_yaml_config(config_path)
@@ -42,25 +49,32 @@ def test_model(
     num_classes = config['nc']
     class_names = config['names']
     
+    # Verificar caminhos
+    print("\nVerificando caminhos...")
+    print(f"Diretório de imagens: {test_images_dir}")
+    print(f"Arquivo de anotações: {test_annotations_path}")
+    if not os.path.exists(test_images_dir):
+        raise FileNotFoundError(f"Diretório de imagens não encontrado: {test_images_dir}")
+    if not os.path.exists(test_annotations_path):
+        raise FileNotFoundError(f"Arquivo de anotações não encontrado: {test_annotations_path}")
+    
     # Criar diretório de saída
     os.makedirs(output_dir, exist_ok=True)
     
     # Carregar modelo
-    print(f"Carregando modelo {model_arch} com {num_classes} classes...")
+    print(f"\nCarregando modelo {model_arch} com {num_classes} classes...")
     model = models.get(model_arch, num_classes=num_classes, pretrained_weights=None)
     
-    # Carregar checkpoint manualmente para a versão 3.1.3
+    # Carregar checkpoint
+    print(f"Carregando checkpoint: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['net'])
     model = model.to(device)
     model.eval()
     
     # Configurar dataset de teste com nossa classe corrigida
-    print("Configurando dataset de teste...")
-    print(f"Procurando imagens em: {test_images_dir}")
-    print(f"Procurando anotações em: {test_annotations_path}")
-    
-    test_dataset = FixedCOCODetectionDataset(
+    print("\nConfigurando dataset de teste...")
+    test_dataset = FixedPathCOCODataset(
         data_dir=test_images_dir,  # Caminho direto para as imagens
         json_file=test_annotations_path,
         input_dim=(640, 640),
@@ -68,9 +82,17 @@ def test_model(
             {'DetectionPaddedRescale': {'input_dim': (640, 640)}},
             {'DetectionStandardize': {'max_value': 255.0}},
             {'DetectionImagePermute': {}},
-        ],
-        images_dir=""  # Forçamos a usar apenas data_dir
+        ]
     )
+    
+    # Verificar algumas imagens
+    print("\nVerificando acesso às imagens...")
+    for i in range(min(3, len(test_dataset))):
+        try:
+            img, _ = test_dataset[i]
+            print(f"Imagem {i} carregada com sucesso")
+        except Exception as e:
+            print(f"Erro ao carregar imagem {i}: {str(e)}")
     
     test_loader = DataLoader(
         test_dataset,
@@ -81,7 +103,7 @@ def test_model(
     )
     
     # Configurar métricas
-    print("Configurando métricas de avaliação...")
+    print("\nConfigurando métricas de avaliação...")
     metrics = DetectionMetrics(
         num_cls=num_classes,
         post_prediction_callback=model.get_post_prediction_callback(conf=conf_threshold, iou=iou_threshold),
@@ -89,18 +111,21 @@ def test_model(
     )
     
     # Loop de teste
-    print(f"Iniciando teste em {len(test_dataset)} imagens...")
+    print(f"\nIniciando teste em {len(test_dataset)} imagens...")
     progress_bar = tqdm(test_loader, desc="Processando batches")
     
-    for batch_idx, (imgs, targets) in enumerate(progress_bar):
-        imgs = imgs.to(device)
-        targets = [t.to(device) for t in targets]
-        
-        with torch.no_grad():
-            preds = model(imgs)
-        
-        # Atualizar métricas
-        metrics.update(preds, targets)
+    try:
+        for batch_idx, (imgs, targets) in enumerate(progress_bar):
+            imgs = imgs.to(device)
+            targets = [t.to(device) for t in targets]
+            
+            with torch.no_grad():
+                preds = model(imgs)
+            
+            metrics.update(preds, targets)
+    except Exception as e:
+        print(f"\nErro durante o teste: {str(e)}")
+        raise
     
     # Calcular métricas finais
     print("\nCalculando métricas finais...")
@@ -117,7 +142,7 @@ def test_model(
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - Versão Corrigida")
+    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - Versão Final Funcional")
     parser.add_argument("--checkpoint", type=str, required=True, help="Caminho para o checkpoint .pth")
     parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
     parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
