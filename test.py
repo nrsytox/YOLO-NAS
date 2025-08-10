@@ -3,9 +3,10 @@ import torch
 import yaml
 from super_gradients.training import models
 from super_gradients.training.metrics import DetectionMetrics
-from super_gradients.training.datasets.detection_datasets.coco_format_detection import COCOFormatDetectionDataset
+from super_gradients.training.datasets.detection_datasets import COCODetectionDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from super_gradients.training.utils.detection_utils import DetectionCollateFN
 
 def load_yaml_config(yaml_file):
     """Carrega o arquivo de configuração YAML."""
@@ -19,11 +20,11 @@ def test_model(
     conf_threshold: float = 0.5,
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
     model_arch: str = 'yolo_nas_m',
-    visualize: bool = False,
     output_dir: str = 'outputs'
 ):
     """
     Testa o modelo YOLO-NAS usando configuração YAML e calcula métricas.
+    Compatível com super-gradients==3.1.3
     """
     # Carregar configuração YAML
     config = load_yaml_config(config_path)
@@ -37,26 +38,26 @@ def test_model(
     
     # Carregar modelo
     print(f"Carregando modelo {model_arch} com {num_classes} classes...")
-    model = models.get(model_arch, num_classes=num_classes, checkpoint_path=checkpoint_path)
+    model = models.get(model_arch, num_classes=num_classes, pretrained_weights=None)
+    
+    # Carregar checkpoint manualmente para a versão 3.1.3
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['net'])
     model = model.to(device)
     model.eval()
     
-    # Obter tamanho de entrada do modelo (ajuste para versões mais recentes do SuperGradients)
-    try:
-        input_dim = model._image_size
-    except AttributeError:
-        try:
-            input_dim = model._default_nms_conf.image_size
-        except AttributeError:
-            input_dim = [640, 640]  # Valor padrão se não for encontrado
-    
     # Configurar dataset de teste
     print("Configurando dataset de teste...")
-    test_dataset = COCOFormatDetectionDataset(
+    test_dataset = COCODetectionDataset(
         data_dir=test_images_dir,
-        json_annotation_file=test_annotations_path,
-        input_dim=input_dim,
-        transforms=model._preprocessing_transforms
+        json_file=test_annotations_path,
+        input_dim=(640, 640),  # Tamanho fixo para YOLO-NAS
+        transforms=[
+            {'DetectionLongestMaxSizeRescale': {'max_size': 640}},
+            {'DetectionPadToSize': {'output_size': (640, 640), 'pad_value': 114}},
+            {'DetectionStandardize': {'max_value': 255.0}},
+            {'DetectionImagePermute': {}},
+        ]
     )
     
     test_loader = DataLoader(
@@ -64,13 +65,13 @@ def test_model(
         batch_size=batch_size,
         shuffle=False,
         num_workers=2,
-        collate_fn=test_dataset.collate_fn
+        collate_fn=DetectionCollateFN()
     )
     
     # Configurar métricas
     metrics = DetectionMetrics(
         num_cls=num_classes,
-        post_prediction_callback=model._get_post_prediction_callback(conf=conf_threshold),
+        post_prediction_callback=model.get_post_prediction_callback(conf=conf_threshold),
         normalize_targets=True,
         calc_best_score=False
     )
@@ -81,31 +82,13 @@ def test_model(
     
     for batch_idx, (imgs, targets) in enumerate(progress_bar):
         imgs = imgs.to(device)
+        targets = [t.to(device) for t in targets]
         
         with torch.no_grad():
             preds = model(imgs)
         
-        # Converter predições para formato de métricas
-        formatted_preds = []
-        for img_idx, detections in enumerate(preds):
-            if len(detections.prediction) == 0:
-                formatted_preds.append(torch.zeros((0, 6), device=device))
-                continue
-            
-            # Formatar como [x1, y1, x2, y2, conf, class]
-            boxes = detections.prediction[:, :4]
-            scores = detections.prediction[:, 4]
-            classes = detections.prediction[:, 5]
-            
-            formatted_pred = torch.cat([
-                boxes,
-                scores.unsqueeze(1),
-                classes.unsqueeze(1)
-            ], dim=1)
-            formatted_preds.append(formatted_pred)
-        
         # Atualizar métricas
-        metrics.update(formatted_preds, targets)
+        metrics.update(preds, targets)
     
     # Calcular métricas finais
     print("\nCalculando métricas finais...")
@@ -122,14 +105,13 @@ def test_model(
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML")
+    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - SG 3.1.3")
     parser.add_argument("--checkpoint", type=str, required=True, help="Caminho para o checkpoint .pth")
     parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
     parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
     parser.add_argument("--conf_threshold", type=float, default=0.5, help="Limiar de confiança")
     parser.add_argument("--model_arch", type=str, default="yolo_nas_m", 
                         choices=["yolo_nas_s", "yolo_nas_m", "yolo_nas_l"], help="Arquitetura do modelo")
-    parser.add_argument("--visualize", action="store_true", help="Gerar visualizações")
     parser.add_argument("--output_dir", type=str, default="test_outputs", help="Pasta de saída")
     
     args = parser.parse_args()
@@ -140,6 +122,5 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         conf_threshold=args.conf_threshold,
         model_arch=args.model_arch,
-        visualize=args.visualize,
         output_dir=args.output_dir
     )
