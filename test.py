@@ -1,6 +1,7 @@
 import os
 import torch
 import yaml
+import cv2
 from super_gradients.training import models
 from super_gradients.training.metrics import DetectionMetrics
 from super_gradients.training.datasets.detection_datasets import COCODetectionDataset
@@ -13,6 +14,25 @@ def load_yaml_config(yaml_file):
     with open(yaml_file) as f:
         return yaml.safe_load(f)
 
+class RobustCOCODetectionDataset(COCODetectionDataset):
+    """Subclasse para lidar com arquivos de imagem ausentes."""
+    
+    def _load_image(self, index):
+        """Substitui o método original para lidar com arquivos ausentes."""
+        img_file = self._get_img_path(index)
+        if not os.path.exists(img_file):
+            print(f"Aviso: Arquivo de imagem não encontrado, substituindo por imagem preta: {img_file}")
+            return torch.zeros((3, self.input_dim[1], self.input_dim[0]), img_file
+        try:
+            img = cv2.imread(img_file)
+            if img is None:
+                raise FileNotFoundError
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            return img, img_file
+        except Exception as e:
+            print(f"Aviso: Erro ao carregar imagem, substituindo por imagem preta: {img_file} - {str(e)}")
+            return torch.zeros((3, self.input_dim[1], self.input_dim[0]), dtype=torch.float32), img_file
+
 def test_model(
     checkpoint_path: str,
     config_path: str,
@@ -24,8 +44,7 @@ def test_model(
     output_dir: str = 'outputs'
 ):
     """
-    Testa o modelo YOLO-NAS usando configuração YAML e calcula métricas.
-    Versão final compatível com super-gradients==3.1.3
+    Testa o modelo YOLO-NAS com tratamento robusto para arquivos ausentes.
     """
     # Carregar configuração YAML
     config = load_yaml_config(config_path)
@@ -34,6 +53,12 @@ def test_model(
     num_classes = config['nc']
     class_names = config['names']
     
+    # Verificar caminhos
+    if not os.path.exists(test_images_dir):
+        raise FileNotFoundError(f"Diretório de imagens não encontrado: {test_images_dir}")
+    if not os.path.exists(test_annotations_path):
+        raise FileNotFoundError(f"Arquivo de anotações não encontrado: {test_annotations_path}")
+    
     # Criar diretório de saída
     os.makedirs(output_dir, exist_ok=True)
     
@@ -41,15 +66,17 @@ def test_model(
     print(f"Carregando modelo {model_arch} com {num_classes} classes...")
     model = models.get(model_arch, num_classes=num_classes, pretrained_weights=None)
     
-    # Carregar checkpoint manualmente para a versão 3.1.3
+    # Carregar checkpoint
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint não encontrado: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['net'])
     model = model.to(device)
     model.eval()
     
-    # Configurar dataset de teste
+    # Configurar dataset de teste com tratamento robusto
     print("Configurando dataset de teste...")
-    test_dataset = COCODetectionDataset(
+    test_dataset = RobustCOCODetectionDataset(
         data_dir=test_images_dir,
         json_file=test_annotations_path,
         input_dim=(640, 640),
@@ -68,7 +95,7 @@ def test_model(
         collate_fn=DetectionCollateFN()
     )
     
-    # Configurar métricas (sem calc_best_score)
+    # Configurar métricas
     print("Configurando métricas de avaliação...")
     metrics = DetectionMetrics(
         num_cls=num_classes,
@@ -76,43 +103,54 @@ def test_model(
         normalize_targets=True
     )
     
-    # Loop de teste
+    # Loop de teste com tratamento de erros
     print(f"Iniciando teste em {len(test_dataset)} imagens...")
     progress_bar = tqdm(test_loader, desc="Processando batches")
     
-    for batch_idx, (imgs, targets) in enumerate(progress_bar):
-        imgs = imgs.to(device)
-        targets = [t.to(device) for t in targets]
+    try:
+        for batch_idx, (imgs, targets) in enumerate(progress_bar):
+            try:
+                imgs = imgs.to(device)
+                targets = [t.to(device) for t in targets]
+                
+                with torch.no_grad():
+                    preds = model(imgs)
+                
+                metrics.update(preds, targets)
+            except Exception as e:
+                print(f"\nAviso: Erro ao processar batch {batch_idx}: {str(e)}")
+                continue
         
-        with torch.no_grad():
-            preds = model(imgs)
+        # Calcular métricas finais
+        print("\nCalculando métricas finais...")
+        metrics_results = metrics.compute()
         
-        # Atualizar métricas
-        metrics.update(preds, targets)
+        # Resultados
+        print("\n=== Resultados do Teste ===")
+        print(f"Precisão @0.5 (P0.5): {metrics_results['precision@0.50']:.4f}")
+        print(f"Recall @0.5 (R0.5): {metrics_results['recall@0.50']:.4f}")
+        print(f"mAP@0.50: {metrics_results['mAP@0.50']:.4f}")
+        
+        return metrics_results
     
-    # Calcular métricas finais
-    print("\nCalculando métricas finais...")
-    metrics_results = metrics.compute()
-    
-    # Resultados
-    print("\n=== Resultados do Teste ===")
-    print(f"Precisão @0.5 (P0.5): {metrics_results['precision@0.50']:.4f}")
-    print(f"Recall @0.5 (R0.5): {metrics_results['recall@0.50']:.4f}")
-    print(f"mAP@0.50: {metrics_results['mAP@0.50']:.4f}")
-    
-    return metrics_results
+    except KeyboardInterrupt:
+        print("\nTeste interrompido pelo usuário")
+        return None
+    except Exception as e:
+        print(f"\nErro durante o teste: {str(e)}")
+        return None
 
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML - Versão Final 3.1.3")
+    parser = argparse.ArgumentParser(description="Teste Robusto do YOLO-NAS com YAML")
     parser.add_argument("--checkpoint", type=str, required=True, help="Caminho para o checkpoint .pth")
     parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
     parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
     parser.add_argument("--conf_threshold", type=float, default=0.5, help="Limiar de confiança")
     parser.add_argument("--iou_threshold", type=float, default=0.5, help="Limiar de IoU para NMS")
     parser.add_argument("--model_arch", type=str, default="yolo_nas_m", 
-                        choices=["yolo_nas_s", "yolo_nas_m", "yolo_nas_l"], help="Arquitetura do modelo")
+                       choices=["yolo_nas_s", "yolo_nas_m", "yolo_nas_l"], help="Arquitetura do modelo")
     parser.add_argument("--output_dir", type=str, default="test_outputs", help="Pasta de saída")
     
     args = parser.parse_args()
