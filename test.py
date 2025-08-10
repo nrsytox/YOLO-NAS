@@ -2,6 +2,7 @@ import os
 import torch
 import yaml
 import cv2
+import numpy as np
 from super_gradients.training import models
 from super_gradients.training.metrics import DetectionMetrics
 from super_gradients.training.datasets.detection_datasets import COCODetectionDataset
@@ -19,10 +20,13 @@ class RobustCOCODetectionDataset(COCODetectionDataset):
     
     def _load_image(self, index):
         """Substitui o método original para lidar com arquivos ausentes."""
-        img_file = self._get_img_path(index)
+        img_info = self.coco.loadImgs(self.ids[index])[0]
+        img_file = os.path.join(self.root, img_info['file_name'])
+        
         if not os.path.exists(img_file):
             print(f"Aviso: Arquivo de imagem não encontrado, substituindo por imagem preta: {img_file}")
-            return torch.zeros(3, self.input_dim[1], self.input_dim[0]), img_file
+            return np.zeros((self.input_dim[1], self.input_dim[0], 3), dtype=np.uint8), img_file
+        
         try:
             img = cv2.imread(img_file)
             if img is None:
@@ -31,7 +35,7 @@ class RobustCOCODetectionDataset(COCODetectionDataset):
             return img, img_file
         except Exception as e:
             print(f"Aviso: Erro ao carregar imagem, substituindo por imagem preta: {img_file} - {str(e)}")
-            return torch.zeros((3, self.input_dim[1], self.input_dim[0]), dtype=torch.float32), img_file
+            return np.zeros((self.input_dim[1], self.input_dim[0], 3), dtype=np.uint8), img_file
 
 def test_model(
     checkpoint_path: str,
@@ -45,6 +49,7 @@ def test_model(
 ):
     """
     Testa o modelo YOLO-NAS com tratamento robusto para arquivos ausentes.
+    Versão final corrigida para super-gradients 3.1.3.
     """
     # Carregar configuração YAML
     config = load_yaml_config(config_path)
@@ -92,7 +97,8 @@ def test_model(
         batch_size=batch_size,
         shuffle=False,
         num_workers=2,
-        collate_fn=DetectionCollateFN()
+        collate_fn=DetectionCollateFN(),
+        persistent_workers=True
     )
     
     # Configurar métricas
