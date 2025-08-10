@@ -3,7 +3,7 @@ import yaml
 import torch
 from super_gradients.training import Trainer
 from super_gradients.training.models import get
-from super_gradients.training.datasets.detection_datasets.coco_format import COCOFormatDetectionDataset
+from super_gradients.training.datasets.detection_datasets.coco_format_detection import COCOFormatDetectionDataset
 from super_gradients.training.transforms.detection_transforms import (
     DetectionPaddedRescale,
     DetectionStandardize,
