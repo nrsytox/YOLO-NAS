@@ -59,7 +59,10 @@ def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
         print(f"mAP@0.50:0.95: {results['mAP@0.50:0.95']:.4f}")
 
 if __name__ == "__main__":
-    # Substitua pelos caminhos corretos
-    data_yaml = '/content/drive/MyDrive/dataset_victim_data/victim_data.yaml'
-    weight_path = '/content/drive/MyDrive/pdd_nas_output0/ckpt_best.pth'
+    import sys
+    if len(sys.argv) != 3:
+        print("Uso: python test.py <caminho_data_yaml> <caminho_pesos>")
+        sys.exit(1)
+    data_yaml = sys.argv[1]
+    weight_path = sys.argv[2]
     main(data_yaml, weight_path)
