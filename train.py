@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
     # Start Time
     s_time = time.time()
-    if args.test:
+    if args['test']:
         # Carregar checkpoint no modelo
         trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
 
