@@ -14,16 +14,23 @@ def load_yaml_config(yaml_file):
         return yaml.safe_load(f)
 
 class FixedPathCOCODataset(COCODetectionDataset):
-    """Dataset com caminhos corrigidos para evitar duplicação de paths"""
-    def __init__(self, *args, **kwargs):
-        # Remove images_dir se estiver presente para evitar conflito
-        if 'images_dir' in kwargs:
-            kwargs.pop('images_dir')
-        super().__init__(*args, **kwargs)
+    """Dataset com caminhos corrigidos e inicialização adequada"""
+    def __init__(self, data_dir, json_file, *args, **kwargs):
+        # Chamada correta ao construtor pai
+        super().__init__(
+            data_dir=data_dir,
+            json_annotation_file=json_file,
+            *args,
+            **kwargs
+        )
+        self.data_dir = data_dir  # Garante que data_dir está correto
     
     def _load_image(self, index):
         """Corrige o caminho da imagem para usar diretamente data_dir"""
-        img_file = os.path.join(self.data_dir, self.images[index])
+        # Acessa a lista de imagens corretamente via self.images_ids
+        img_info = self.coco.loadImgs(self.images_ids[index])[0]
+        img_file = os.path.join(self.data_dir, img_info['file_name'])
+        
         if not os.path.exists(img_file):
             raise FileNotFoundError(f"Image file not found: {img_file}")
         return super()._load_image(index)
@@ -75,7 +82,7 @@ def test_model(
     # Configurar dataset de teste com nossa classe corrigida
     print("\nConfigurando dataset de teste...")
     test_dataset = FixedPathCOCODataset(
-        data_dir=test_images_dir,  # Caminho direto para as imagens
+        data_dir=test_images_dir,
         json_file=test_annotations_path,
         input_dim=(640, 640),
         transforms=[
@@ -90,9 +97,10 @@ def test_model(
     for i in range(min(3, len(test_dataset))):
         try:
             img, _ = test_dataset[i]
-            print(f"Imagem {i} carregada com sucesso")
+            print(f"Imagem {i} carregada com sucesso - Tamanho: {img.shape}")
         except Exception as e:
             print(f"Erro ao carregar imagem {i}: {str(e)}")
+            raise
     
     test_loader = DataLoader(
         test_dataset,
