@@ -18,6 +18,7 @@ def test_model(
     config_path: str,
     batch_size: int = 4,
     conf_threshold: float = 0.5,
+    iou_threshold: float = 0.5,  # Adicionado parâmetro iou
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
     model_arch: str = 'yolo_nas_m',
     output_dir: str = 'outputs'
@@ -46,7 +47,7 @@ def test_model(
     model = model.to(device)
     model.eval()
     
-    # Configurar dataset de teste com transformações comprovadamente compatíveis
+    # Configurar dataset de teste
     print("Configurando dataset de teste...")
     test_dataset = COCODetectionDataset(
         data_dir=test_images_dir,
@@ -67,10 +68,11 @@ def test_model(
         collate_fn=DetectionCollateFN()
     )
     
-    # Configurar métricas
+    # Configurar métricas com iou_threshold
+    print("Configurando métricas de avaliação...")
     metrics = DetectionMetrics(
         num_cls=num_classes,
-        post_prediction_callback=model.get_post_prediction_callback(conf=conf_threshold),
+        post_prediction_callback=model.get_post_prediction_callback(conf=conf_threshold, iou=iou_threshold),
         normalize_targets=True,
         calc_best_score=False
     )
@@ -109,6 +111,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
     parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
     parser.add_argument("--conf_threshold", type=float, default=0.5, help="Limiar de confiança")
+    parser.add_argument("--iou_threshold", type=float, default=0.5, help="Limiar de IoU para NMS")
     parser.add_argument("--model_arch", type=str, default="yolo_nas_m", 
                         choices=["yolo_nas_s", "yolo_nas_m", "yolo_nas_l"], help="Arquitetura do modelo")
     parser.add_argument("--output_dir", type=str, default="test_outputs", help="Pasta de saída")
@@ -120,6 +123,7 @@ if __name__ == "__main__":
         config_path=args.config,
         batch_size=args.batch_size,
         conf_threshold=args.conf_threshold,
+        iou_threshold=args.iou_threshold,
         model_arch=args.model_arch,
         output_dir=args.output_dir
     )
