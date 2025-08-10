@@ -155,7 +155,7 @@ if __name__ == '__main__':
                                         })
         
         # Carregar checkpoint no modelo
-        trainer._load_checkpoint(checkpoint_path=args['weight'], model)
+        trainer._load_checkpoint_to_model(model, checkpoint_path=args['weight'])
 
         # Rodar apenas o teste (validação)
         results = trainer.test(model=model, test_loader=valid_loader, batch_size=args.batch_size)
