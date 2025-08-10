@@ -181,7 +181,7 @@ if __name__ == '__main__':
     if 'test' in (yaml_params['images'].keys() or yaml_params['labels'].keys()):
         testset = COCOFormatDetectionDataset(data_dir=yaml_params['Dir'],
                                     images_dir=yaml_params['images']['test'],
-                                    json_annotation_file=yaml_params['labels']['test'],
+                                    json_annotation_file=os.path.join(yaml_params['Dir'], yaml_params['labels']['test']),
                                     input_dim=(args['size'], args['size']),
                                     ignore_empty_annotations=False,
                                     transforms=[
