@@ -75,7 +75,7 @@ if __name__ == '__main__':
     s_time = time.time()
     if args['test']:
         # Carregar checkpoint no modelo
-        trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
+        Trainer.load_checkpoint(checkpoint_path=args.weights, model=model)
 
         # Rodar apenas o teste (validação)
         results = trainer.test(model=model, test_loader=valid_loader, batch_size=args.batch_size)
