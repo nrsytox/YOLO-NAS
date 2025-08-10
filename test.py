@@ -1,71 +1,146 @@
-import sys
-import yaml
+import os
 import torch
-from super_gradients.training import Trainer
-from super_gradients.training.models import get
+import yaml
+from super_gradients.training import models
+from super_gradients.training.metrics import DetectionMetrics
 from super_gradients.training.datasets.detection_datasets.coco_format_detection import COCOFormatDetectionDataset
-from super_gradients.training.transforms.transforms import DetectionMosaic, DetectionRandomAffine, DetectionHSV, \
-    DetectionHorizontalFlip, DetectionPaddedRescale, DetectionStandardize, DetectionTargetsFormatTransform
-from super_gradients.training import dataloaders
-from super_gradients.training.datasets.datasets_utils import worker_init_reset_seed
-from super_gradients.training.utils.detection_utils import CrowdDetectionCollateFN
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-def main(data_yaml, weight_path, batch_size=4, confidence_threshold=0.5):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+def load_yaml_config(yaml_file):
+    """Carrega o arquivo de configuração YAML."""
+    with open(yaml_file) as f:
+        return yaml.safe_load(f)
 
-    with open(data_yaml, 'r') as f:
-        data = yaml.safe_load(f)
-    num_classes = len(data['names'])
-    # Criar o Trainer
-    trainer = Trainer(experiment_name='yolo_nas_test', ckpt_root_dir='runs')
-
-    # Carregar o modelo
-    model = get('yolo_nas_m', num_classes=num_classes, pretrained_weights=None)
+def test_model(
+    checkpoint_path: str,
+    config_path: str,
+    batch_size: int = 4,
+    conf_threshold: float = 0.5,
+    device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
+    model_arch: str = 'yolo_nas_l',
+    visualize: bool = False,
+    output_dir: str = 'outputs'
+):
+    """
+    Testa o modelo YOLO-NAS usando configuração YAML e calcula métricas.
+    
+    Args:
+        checkpoint_path (str): Caminho para o checkpoint .pth
+        config_path (str): Caminho para o arquivo YAML de configuração
+        batch_size (int): Tamanho do batch para inferência
+        conf_threshold (float): Limiar de confiança para detecções
+        device (str): Dispositivo para execução
+        model_arch (str): Arquitetura do modelo
+        visualize (bool): Se True, salva visualizações
+        output_dir (str): Pasta para salvar resultados
+    """
+    # Carregar configuração YAML
+    config = load_yaml_config(config_path)
+    test_images_dir = os.path.join(config['Dir'], config['images']['test'])
+    test_annotations_path = os.path.join(config['Dir'], config['labels']['test'])
+    num_classes = config['nc']
+    class_names = config['names']
+    
+    # Criar diretório de saída
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Carregar modelo
+    print(f"Carregando modelo {model_arch} com {num_classes} classes...")
+    model = models.get(model_arch, num_classes=num_classes, checkpoint_path=checkpoint_path)
     model = model.to(device)
-
-    # Carregar o checkpoint
-    trainer.load_checkpoint(checkpoint_path=weight_path, model=model)
-
-    # Preparar o dataset e o dataloader
-    testset = COCOFormatDetectionDataset(
-        data_dir=data_yaml['Dir'],
-        images_dir=data_yaml['images']['test'],
-        json_annotation_file=data_yaml['labels']['test'],
-        input_dim=(640, 640),
-        ignore_empty_annotations=False,
-        transforms=[
-            DetectionPaddedRescale(input_dim=(640, 640), max_targets=300),
-            DetectionStandardize(max_value=255),
-            DetectionTargetsFormatTransform(max_targets=300, input_dim=(640, 640), output_format="LABEL_CXCYWH")
-        ]
+    model.eval()
+    
+    # Configurar dataset de teste
+    print("Configurando dataset de teste...")
+    test_dataset = COCOFormatDetectionDataset(
+        data_dir=test_images_dir,
+        json_annotation_file=test_annotations_path,
+        input_dim=model._default_nms_conf.image_size,
+        transforms=model._preprocessing_transforms
     )
-
-    test_loader = dataloaders.get(dataset=testset, dataloader_params={
-        "shuffle": False,
-        "batch_size": batch_size,
-        "num_workers": 2,
-        "drop_last": False,
-        "pin_memory": True,
-        "collate_fn": CrowdDetectionCollateFN(),
-        "worker_init_fn": None
-    })
-
-    # Rodar o teste
-    results = trainer.test(model=model, test_loader=test_loader, device=device, confidence_threshold=confidence_threshold)
-
-    # Exibir os resultados
-    print("\n===== RESULTADOS =====")
-    print(f"Precision: {results['precision']:.4f}")
-    print(f"Recall:    {results['recall']:.4f}")
-    print(f"mAP@0.50:  {results['mAP@0.50']:.4f}")
-    if 'mAP@0.50:0.95' in results:
-        print(f"mAP@0.50:0.95: {results['mAP@0.50:0.95']:.4f}")
+    
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        collate_fn=test_dataset.collate_fn
+    )
+    
+    # Configurar métricas
+    metrics = DetectionMetrics(
+        num_cls=num_classes,
+        post_prediction_callback=model._get_post_prediction_callback(conf=conf_threshold),
+        normalize_targets=True,
+        calc_best_score=False
+    )
+    
+    # Loop de teste
+    print(f"Iniciando teste em {len(test_dataset)} imagens...")
+    progress_bar = tqdm(test_loader, desc="Processando batches")
+    
+    for batch_idx, (imgs, targets) in enumerate(progress_bar):
+        imgs = imgs.to(device)
+        
+        with torch.no_grad():
+            preds = model(imgs)
+        
+        # Converter predições para formato de métricas
+        formatted_preds = []
+        for img_idx, detections in enumerate(preds):
+            if len(detections.prediction) == 0:
+                formatted_preds.append(torch.zeros((0, 6), device=device))
+                continue
+            
+            # Formatar como [x1, y1, x2, y2, conf, class]
+            boxes = detections.prediction[:, :4]
+            scores = detections.prediction[:, 4]
+            classes = detections.prediction[:, 5]
+            
+            formatted_pred = torch.cat([
+                boxes,
+                scores.unsqueeze(1),
+                classes.unsqueeze(1)
+            ], dim=1)
+            formatted_preds.append(formatted_pred)
+        
+        # Atualizar métricas
+        metrics.update(formatted_preds, targets)
+    
+    # Calcular métricas finais
+    print("\nCalculando métricas finais...")
+    metrics_results = metrics.compute()
+    
+    # Resultados
+    print("\n=== Resultados do Teste ===")
+    print(f"Precisão @0.5 (P0.5): {metrics_results['precision@0.50']:.4f}")
+    print(f"Recall @0.5 (R0.5): {metrics_results['recall@0.50']:.4f}")
+    print(f"mAP@0.50: {metrics_results['mAP@0.50']:.4f}")
+    
+    return metrics_results
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) != 3:
-        print("Uso: python test.py <caminho_data_yaml> <caminho_pesos>")
-        sys.exit(1)
-    data_yaml = sys.argv[1]
-    weight_path = sys.argv[2]
-    main(data_yaml, weight_path)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Teste do YOLO-NAS com YAML")
+    parser.add_argument("--checkpoint", type=str, required=True, help="Caminho para o checkpoint .pth")
+    parser.add_argument("--config", type=str, required=True, help="Caminho para o arquivo YAML de configuração")
+    parser.add_argument("--batch_size", type=int, default=4, help="Tamanho do batch para teste")
+    parser.add_argument("--conf_threshold", type=float, default=0.5, help="Limiar de confiança")
+    parser.add_argument("--model_arch", type=str, default="yolo_nas_l", 
+                        choices=["yolo_nas_s", "yolo_nas_m", "yolo_nas_l"], help="Arquitetura do modelo")
+    parser.add_argument("--visualize", action="store_true", help="Gerar visualizações")
+    parser.add_argument("--output_dir", type=str, default="test_outputs", help="Pasta de saída")
+    
+    args = parser.parse_args()
+    
+    results = test_model(
+        checkpoint_path=args.checkpoint,
+        config_path=args.config,
+        batch_size=args.batch_size,
+        conf_threshold=args.conf_threshold,
+        model_arch=args.model_arch,
+        visualize=args.visualize,
+        output_dir=args.output_dir
+    )
