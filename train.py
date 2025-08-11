@@ -322,11 +322,11 @@ if __name__ == '__main__':
     # Evaluating on Val Dataset
     eval_model = trainer.test(model=best_model,
                     test_loader=valid_loader,
-                    test_metrics_list=DetectionMetrics_050(score_thres=0.1, 
+                    test_metrics_list=DetectionMetrics_050(score_thres=0.001, 
                                                         top_k_predictions=300, 
                                                         num_cls=no_class, 
                                                         normalize_targets=True, 
-                                                        post_prediction_callback=PPYoloEPostPredictionCallback(score_threshold=0.01, 
+                                                        post_prediction_callback=PPYoloEPostPredictionCallback(score_threshold=0.001, 
                                                                                                                 nms_top_k=1000, 
                                                                                                                 max_predictions=300,                                                                              
                                                                                                                 nms_threshold=0.7)
@@ -340,11 +340,11 @@ if __name__ == '__main__':
     if 'test' in (yaml_params['images'].keys() or yaml_params['labels'].keys()):
         test_result = trainer.test(model=best_model,
                     test_loader=test_loader,
-                    test_metrics_list=DetectionMetrics_050(score_thres=0.1, 
+                    test_metrics_list=DetectionMetrics_050(score_thres=0.001, 
                                                         top_k_predictions=300, 
                                                         num_cls=no_class, 
                                                         normalize_targets=True, 
-                                                        post_prediction_callback=PPYoloEPostPredictionCallback(score_threshold=0.01, 
+                                                        post_prediction_callback=PPYoloEPostPredictionCallback(score_threshold=0.001, 
                                                                                                                 nms_top_k=1000, 
                                                                                                                 max_predictions=300,                                                                              
                                                                                                                 nms_threshold=0.7)
